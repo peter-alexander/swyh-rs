@@ -1,6 +1,6 @@
 //! Streaming-related enumerations and the [`StreamingContext`] helper struct.
 //!
-//! Covers [`StreamingFormat`] (LPCM/WAV/RF64/FLAC), [`BitDepth`], [`StreamSize`],
+//! Covers [`StreamingFormat`] (LPCM/WAV/RF64/FLAC/MP3), [`BitDepth`], [`StreamSize`],
 //! [`Endian`], and [`StreamingState`], plus [`StreamingContext`] which aggregates
 //! all per-connection streaming parameters.
 
@@ -25,14 +25,16 @@ pub enum StreamingFormat {
     Lpcm,
     Wav,
     Flac,
+    Mp3,
     Rf64,
 }
 
 impl StreamingFormat {
-    pub const ALL: [StreamingFormat; 4] = [
+    pub const ALL: [StreamingFormat; 5] = [
         StreamingFormat::Lpcm,
         StreamingFormat::Wav,
         StreamingFormat::Flac,
+        StreamingFormat::Mp3,
         StreamingFormat::Rf64,
     ];
 
@@ -41,7 +43,20 @@ impl StreamingFormat {
             StreamingFormat::Lpcm => "lpcm",
             StreamingFormat::Wav => "wav",
             StreamingFormat::Flac => "flac",
+            StreamingFormat::Mp3 => "mp3",
             StreamingFormat::Rf64 => "rf64",
+        }
+    }
+
+    /// Whether the selected format can encode this sample rate without
+    /// introducing an additional resampling stage.
+    pub const fn supports_sample_rate(self, sample_rate: u32) -> bool {
+        match self {
+            StreamingFormat::Mp3 => matches!(
+                sample_rate,
+                8000 | 11025 | 12000 | 16000 | 22050 | 24000 | 32000 | 44100 | 48000
+            ),
+            _ => true,
         }
     }
 }
@@ -60,6 +75,7 @@ impl FromStr for StreamingFormat {
             "lpcm" | "raw" => Ok(StreamingFormat::Lpcm),
             "wav" => Ok(StreamingFormat::Wav),
             "flac" => Ok(StreamingFormat::Flac),
+            "mp3" => Ok(StreamingFormat::Mp3),
             "rf64" => Ok(StreamingFormat::Rf64),
             _ => Err(()),
         }
@@ -74,6 +90,7 @@ impl StreamingFormat {
     pub fn dlna_audio_string(self, bps: BitDepth) -> String {
         match self {
             StreamingFormat::Flac => "audio/FLAC".to_string(),
+            StreamingFormat::Mp3 => "audio/mpeg (MP3)".to_string(),
             StreamingFormat::Wav | StreamingFormat::Rf64 => "audio/wave;codec=1 (WAV)".to_string(),
             StreamingFormat::Lpcm => {
                 if bps == BitDepth::Bits16 {
