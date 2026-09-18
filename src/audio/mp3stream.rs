@@ -129,6 +129,10 @@ impl Mp3Channel {
     pub(crate) fn stop(&self) {
         self.active.store(false, Release);
     }
+
+    pub(crate) fn is_active(&self) -> bool {
+        self.active.load(Acquire)
+    }
 }
 
 fn encode_and_drain(
