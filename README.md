@@ -50,7 +50,7 @@ I wrote this because
 - SWYH did not work well with Volumio (push streaming did not work)
 - SWYH has a substantial memory leak due to the use of an old and unmaintained Intel .Net UPNP/DLNA library it uses.
 
-**NOTE** swyh-rs does not support lossy mp3 or aac re-encoding, only lossless LPCM/WAV/RF64/FLAC for obvious reasons.
+This fork adds live **MP3** re-encoding with a target average bitrate of about 192 kbps (VBR). MP3 input sample rates are limited to the MPEG Layer III rates up to 48 kHz; 44.1 and 48 kHz require no resampling.
 
 It has been tested with
 
@@ -82,6 +82,7 @@ Music is streamed with the sample rate of the music source (the chosen audio out
 
 Supported audio streaming formats:
 
+- **MP3** (MPEG Layer III), VBR targeting about 192 kbps, for renderers and internet-radio clients that need a lossy stream
 - 16 bit or 24 bit **FLAC** (lossless compression, I'm using the lowest compression level for performance and latency reasons). It is available since version 1.4.0
 - audio/wav (16 bit) with a "maximum length" (4 GB) **WAV** header, available since version 1.3.5
 - uncompressed 16 bit **LPCM** format (audio/l16)
@@ -105,6 +106,7 @@ You can also use swyh-rs as an internet radio station on your local network. swy
 - `http://{your-pc-ip}/stream/swyh.wav` when streaming WAV format
 - `http://{your-pc-ip}/stream/swyh.rf64` when streaming RF64 format
 - `http://{your-pc-ip}/stream/swyh.flac` when streaming FLAC format
+- `http://{your-pc-ip}/stream/swyh.mp3` when streaming MP3 format (live VBR, targeting about 192 kbps)
 
 You can append query parameters to the url for bits per sample (bd = bit depth, 16 or 24) and streamsize (ss: nonechunked, u32maxchunked, u64maxchunked, u32maxnotchunked, u64maxnotchunked).
 The query parmeters in the query string override the configured values.

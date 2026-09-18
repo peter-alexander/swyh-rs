@@ -79,6 +79,7 @@ log = { version = "0.4.34", features = [
 mimalloc = { version = "0.1.52" }
 serde = { version = "1.0.229", features = ["derive"] }
 socket2 = "0.6.5"
+rusty_mp3 = "0.8.0"
 simplelog = { version = "0.12.2", features = ["local-offset"] }
 sys-locale = "0.3"
 tiny_http_dh = { version = "0.12.1", git = "https://github.com/dheijl/tiny-http-dh" }

@@ -69,6 +69,8 @@ static WAV_PROT_INFO: &str = "http-get:*:audio/wav:DLNA.ORG_PN=WAV;DLNA.ORG_OP=0
     DLNA.ORG_FLAGS=03700000000000000000000000000000";
 static FLAC_PROT_INFO: &str = "http-get:*:audio/flac:DLNA.ORG_PN=FLAC;DLNA.ORG_OP=01;DLNA.ORG_CI=0;\
     DLNA.ORG_FLAGS=01700000000000000000000000000000";
+static MP3_PROT_INFO: &str = "http-get:*:audio/mpeg:DLNA.ORG_PN=MP3;DLNA.ORG_OP=01;\
+    DLNA.ORG_FLAGS=01500000000000000000000000000000";
 
 /// didl metadata template
 static DIDL_TEMPLATE: &str = "\
@@ -189,6 +191,7 @@ static BAD_TEMPL: &str = "Error parsing/formatting XML template.";
 /// process-wide static instead of being recompiled per thread-local.
 struct CompiledTemplates {
     flac_prot: CbTemplate,
+    mp3_prot: CbTemplate,
     wav_prot: CbTemplate,
     l16_prot: CbTemplate,
     l24_prot: CbTemplate,
@@ -203,6 +206,8 @@ static TEMPLATES: LazyLock<CompiledTemplates> = LazyLock::new(|| {
     CompiledTemplates {
         flac_prot: CbTemplate::compile(htmlescape::encode_minimal(FLAC_PROT_INFO))
             .expect("static FLAC prot info template is invalid"),
+        mp3_prot: CbTemplate::compile(htmlescape::encode_minimal(MP3_PROT_INFO))
+            .expect("static MP3 prot info template is invalid"),
         wav_prot: CbTemplate::compile(htmlescape::encode_minimal(WAV_PROT_INFO))
             .expect("static WAV prot info template is invalid"),
         l16_prot: CbTemplate::compile(htmlescape::encode_minimal(L16_PROT_INFO))
@@ -519,6 +524,7 @@ impl Controller {
         fmt_vars.insert("duration", Value::static_str("00:00:00"));
         let didl_tmpl = match streaminfo.streaming_format {
             StreamingFormat::Flac => TEMPLATES.flac_prot.format(&fmt_vars),
+            StreamingFormat::Mp3 => TEMPLATES.mp3_prot.format(&fmt_vars),
             StreamingFormat::Rf64 | StreamingFormat::Wav => TEMPLATES.wav_prot.format(&fmt_vars),
             StreamingFormat::Lpcm => match streaminfo.bits_per_sample {
                 BitDepth::Bits16 => TEMPLATES.l16_prot.format(&fmt_vars),

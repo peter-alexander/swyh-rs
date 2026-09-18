@@ -58,7 +58,7 @@ Recognized options:
     -l (--log_level) string : log_level (info/debug) [info]
     -i (--ssdp_interval) i32 : ssdp_interval_mins [10]
     -b (--bits) u16 : bits_per_sample (16/24) [16]
-    -f (--format) string : streaming_format (lpcm/flac/wav/rf64) [LPCM]
+    -f (--format) string : streaming_format (lpcm/flac/mp3/wav/rf64) [LPCM]
        optionally followed by a plus sign and a streamsize [LPCM+U64maxNotChunked] 
     -o (--player_ip) string : (comma-separated) player ip address(es) [last used player]
     -e (--ip_address) string : ip address of the network interface [last used]
@@ -181,6 +181,9 @@ Recognized options:
                             }
                             "FLAC" => {
                                 self.streaming_format = Some(StreamingFormat::Flac);
+                            }
+                            "MP3" => {
+                                self.streaming_format = Some(StreamingFormat::Mp3);
                             }
                             x => errors.push(format!("Invalid streaming_format {x}.")),
                         }
@@ -529,6 +532,12 @@ mod tests {
     }
 
     #[test]
+    fn format_mp3() {
+        let a = parse(&["prog", "-f", "mp3"]).unwrap();
+        assert_eq!(a.streaming_format, Some(StreamingFormat::Mp3));
+    }
+
+    #[test]
     fn format_with_streamsize() {
         let a = parse(&["prog", "-f", "LPCM+U64maxNotChunked"]).unwrap();
         assert_eq!(a.streaming_format, Some(StreamingFormat::Lpcm));
@@ -552,7 +561,7 @@ mod tests {
 
     #[test]
     fn format_invalid() {
-        let errs = parse(&["prog", "-f", "mp3"]).unwrap_err();
+        let errs = parse(&["prog", "-f", "aac"]).unwrap_err();
         assert!(errs.iter().any(|e| e.contains("Invalid streaming_format")));
     }
 

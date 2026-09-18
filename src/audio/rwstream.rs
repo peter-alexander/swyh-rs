@@ -3,7 +3,7 @@
 //! The [`ChannelStream::write`] method receives captured f32 samples from `wave_reader`
 //! via a crossbeam channel. The [`std::io::Read`] implementation on `ChannelStream` is
 //! called by the HTTP response writer and encodes those samples on-the-fly into
-//! LPCM, WAV, RF64, or FLAC format.
+//! LPCM, WAV, RF64, FLAC, or MP3 format.
 use crate::{
     audio::samples_conv::{
         f32x4_to_i32x4_16, f32x4_to_i32x4_16_dither, f32x4_to_i32x4_24, i32_to_i16be, i32_to_i16le,
@@ -34,7 +34,7 @@ use std::{
 };
 use wide::f32x4;
 
-use super::flacstream::FlacChannel;
+use super::{flacstream::FlacChannel, mp3stream::Mp3Channel};
 
 /// Shared audio sample buffer passed between capture and streaming threads.
 /// `Arc<[f32]>` rather than `Arc<Vec<f32>>`: the refcount block and the sample
@@ -63,7 +63,7 @@ fn quantize_and_pack<'b, 's, Q, P>(
 }
 
 /// Channelstream - used to transport the f32 samples from the `wave_reader`
-/// to the http output stream in LPCM/WAV/FLAC format
+/// to the http output stream in LPCM/WAV/RF64/FLAC/MP3 format
 /// implements `Read` for the HTTP streaming
 #[derive(Clone)]
 pub struct ChannelStream {
@@ -73,6 +73,7 @@ pub struct ChannelStream {
     pub streaming_format: StreamingFormat,
     fifo: VecDeque<f32>,
     flac_fifo: VecDeque<u8>,
+    mp3_fifo: VecDeque<u8>,
     // Arc'd so the derived Clone (one per client connect, see `run_server`) is O(1)
     // instead of duplicating a buffer that can be sizeable at high sample rates
     silence: Arc<[f32]>,
@@ -83,6 +84,7 @@ pub struct ChannelStream {
     bits_per_sample: u16,
     use_dither: Dither,
     flac_channel: Option<FlacChannel>,
+    mp3_channel: Option<Mp3Channel>,
     /// Set by [`Self::request_stop`] to make `Read::read` return EOF on the
     /// next call, ending the HTTP response even if the client itself never
     /// closes its end of the connection (e.g. a SlimProto client that stops
@@ -112,6 +114,11 @@ impl ChannelStream {
         } else {
             None
         };
+        let mp3_channel = if context.streaming_format == StreamingFormat::Mp3 {
+            Some(Mp3Channel::new(rx.clone(), context.sample_rate, 2))
+        } else {
+            None
+        };
         let capture_timeout = u64::from(get_config().capture_timeout.unwrap_or(5));
         let mut wav_hdr = match context.streaming_format {
             StreamingFormat::Wav => {
@@ -131,6 +138,7 @@ impl ChannelStream {
             r: rx,
             fifo: VecDeque::with_capacity(16384),
             flac_fifo: VecDeque::with_capacity(16384),
+            mp3_fifo: VecDeque::with_capacity(16384),
             silence: get_silence_buffer(context.sample_rate, capture_timeout / 4).into(),
             capture_timeout: Duration::from_millis(capture_timeout), // silence kicks in after CAPTURE_TIMEOUT seconds
             sending_silence: false,
@@ -141,10 +149,13 @@ impl ChannelStream {
             use_dither: context.use_dither,
             streaming_format: context.streaming_format,
             flac_channel,
+            mp3_channel,
             stop: Arc::new(AtomicBool::new(false)),
         };
         if context.streaming_format == StreamingFormat::Flac {
             chs.start_flac_encoder();
+        } else if context.streaming_format == StreamingFormat::Mp3 {
+            chs.start_mp3_encoder();
         }
         chs
     }
@@ -156,10 +167,19 @@ impl ChannelStream {
         }
     }
 
-    /// stop the flac encoder thread
-    pub fn stop_flac_encoder(&self) {
+    fn start_mp3_encoder(&self) {
+        if let Some(mp3_channel) = &self.mp3_channel {
+            mp3_channel.run();
+        }
+    }
+
+    /// Stop any background encoder thread associated with this client.
+    pub fn stop_encoders(&self) {
         if let Some(flac_channel) = &self.flac_channel {
             flac_channel.stop();
+        }
+        if let Some(mp3_channel) = &self.mp3_channel {
+            mp3_channel.stop();
         }
     }
 
@@ -235,6 +255,41 @@ impl ChannelStream {
         Ok(buf.len())
     }
 
+    /// Fill the HTTP read buffer with encoded MP3 bytes.
+    fn fill_mp3_buffer(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+        debug_assert!(self.mp3_channel.is_some());
+        if buf.is_empty() {
+            return Ok(0);
+        }
+        let mp3_channel = self.mp3_channel.as_ref().unwrap();
+        let mp3_in = &mp3_channel.mp3_in;
+        while self.mp3_fifo.is_empty() {
+            match mp3_in.recv_timeout(self.capture_timeout) {
+                Ok(chunk) => self.mp3_fifo.extend(chunk),
+                Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                    if self.stop.load(Ordering::Acquire) {
+                        return Ok(0);
+                    }
+                    if !mp3_channel.is_active() {
+                        return Err(Error::other("MP3 encoder stopped."));
+                    }
+                }
+                Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
+                    return Err(Error::other("MP3 channel receive error."));
+                }
+            }
+        }
+        let n = buf.len().min(self.mp3_fifo.len());
+        let (s1, s2) = self.mp3_fifo.as_slices();
+        let n1 = n.min(s1.len());
+        buf[..n1].copy_from_slice(&s1[..n1]);
+        if n1 < n {
+            buf[n1..n].copy_from_slice(&s2[..n - n1]);
+        }
+        self.mp3_fifo.drain(0..n);
+        Ok(n)
+    }
+
     /// Fill the HTTP read buffer with LPCM/WAV/RF64 data from the f32 samples `VecDeque` fifo.
     /// The f32 samples are read from the f32 input channel and buffered in the`VecDeque` fifo.
     /// The VecDeque is then read for conversion to LPCM/WAV/RF64 data and
@@ -243,6 +298,7 @@ impl ChannelStream {
         /// the f32 samples are converted in chunks of 4 f32 values (SSE2 f32x4)
         const CHUNK_SIZE: usize = 4;
         debug_assert!(self.flac_channel.is_none());
+        debug_assert!(self.mp3_channel.is_none());
         if self.use_wave_format && !self.wav_hdr.is_empty() {
             let i = self.wav_hdr.len();
             debug_assert!(
@@ -304,16 +360,18 @@ impl ChannelStream {
 }
 
 /// implement the Read trait for the HTTP writer
-/// filling the read buffer with FLAC or LPCM/WAV/RF64 data
+/// filling the read buffer with FLAC, MP3, or LPCM/WAV/RF64 data
 impl Read for ChannelStream {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
         if self.stop.load(Ordering::Acquire) {
             return Ok(0); // EOF: ends the HTTP response on this read
         }
-        if self.flac_channel.is_some() {
-            self.fill_flac_buffer(buf)
-        } else {
-            self.fill_lpcm_buffer(buf)
+        match self.streaming_format {
+            StreamingFormat::Flac => self.fill_flac_buffer(buf),
+            StreamingFormat::Mp3 => self.fill_mp3_buffer(buf),
+            StreamingFormat::Lpcm | StreamingFormat::Wav | StreamingFormat::Rf64 => {
+                self.fill_lpcm_buffer(buf)
+            }
         }
     }
 }

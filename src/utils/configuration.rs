@@ -126,6 +126,8 @@ pub struct Configuration {
     pub rf64_stream_size: Option<StreamSize>,
     #[serde(alias = "FLACStreamSize", default = "CfgDefaults::flac_stream_size")]
     pub flac_stream_size: Option<StreamSize>,
+    #[serde(alias = "MP3StreamSize", default = "CfgDefaults::flac_stream_size")]
+    pub mp3_stream_size: Option<StreamSize>,
     // removed in 1.10.8 (obsolete)
     #[serde(alias = "UseWaveFormat", skip, default)]
     _use_wave_format: bool,
@@ -192,6 +194,7 @@ impl Configuration {
             wav_stream_size: Some(StreamSize::U32maxNotChunked),
             rf64_stream_size: Some(StreamSize::U64maxNotChunked),
             flac_stream_size: Some(StreamSize::NoneChunked),
+            mp3_stream_size: Some(StreamSize::NoneChunked),
             _use_wave_format: false,
             bits_per_sample: Some(16),
             streaming_format: Some(StreamingFormat::Lpcm),
@@ -230,6 +233,7 @@ impl Configuration {
             StreamingFormat::Wav => self.wav_stream_size,
             StreamingFormat::Rf64 => self.rf64_stream_size,
             StreamingFormat::Flac => self.flac_stream_size,
+            StreamingFormat::Mp3 => self.mp3_stream_size,
         }
     }
 
@@ -240,6 +244,7 @@ impl Configuration {
             StreamingFormat::Wav => self.wav_stream_size = Some(size),
             StreamingFormat::Rf64 => self.rf64_stream_size = Some(size),
             StreamingFormat::Flac => self.flac_stream_size = Some(size),
+            StreamingFormat::Mp3 => self.mp3_stream_size = Some(size),
         }
     }
 
