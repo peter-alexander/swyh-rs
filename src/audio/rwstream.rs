@@ -63,7 +63,7 @@ fn quantize_and_pack<'b, 's, Q, P>(
 }
 
 /// Channelstream - used to transport the f32 samples from the `wave_reader`
-/// to the http output stream in LPCM/WAV/FLAC format
+/// to the http output stream in LPCM/WAV/RF64/FLAC/MP3 format
 /// implements `Read` for the HTTP streaming
 #[derive(Clone)]
 pub struct ChannelStream {
@@ -261,13 +261,17 @@ impl ChannelStream {
         if buf.is_empty() {
             return Ok(0);
         }
-        let mp3_in = &self.mp3_channel.as_ref().unwrap().mp3_in;
+        let mp3_channel = self.mp3_channel.as_ref().unwrap();
+        let mp3_in = &mp3_channel.mp3_in;
         while self.mp3_fifo.is_empty() {
             match mp3_in.recv_timeout(self.capture_timeout) {
                 Ok(chunk) => self.mp3_fifo.extend(chunk),
                 Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
                     if self.stop.load(Ordering::Acquire) {
                         return Ok(0);
+                    }
+                    if !mp3_channel.is_active() {
+                        return Err(Error::other("MP3 encoder stopped."));
                     }
                 }
                 Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
