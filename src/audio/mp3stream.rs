@@ -24,7 +24,7 @@ use crate::{
     utils::ui_logger::{LogCategory, ui_log},
 };
 
-const MP3_TARGET_KBPS: f32 = 192.0;
+const MP3_LIVE_BITRATE_KBPS: u32 = 320;
 const SILENCE_PERIOD_MS: u64 = 250;
 
 #[derive(Clone)]
@@ -72,13 +72,14 @@ impl Mp3Channel {
             .name("mp3_encoder".into())
             .stack_size(THREAD_STACK)
             .spawn(move || {
-                // rusty_mp3's CBR path enables a bit-reservoir mode at common
-                // MPEG-1 bitrates and therefore banks frames until finish(). A live
-                // stream never finishes, so use its streaming-friendly VBR path with
-                // an average bitrate target instead.
+                // rusty_mp3 enables its file-oriented bit-reservoir path for
+                // MPEG-1 CBR up to 256 kbps, which banks frames until finish().
+                // A live stream never finishes. At 320 kbps that reservoir path
+                // is explicitly disabled, so complete MP3 frames are available
+                // immediately from next_packet().
                 let mut encoder = Mp3Encoder::new(Mp3EncoderConfig {
-                    bitrate_kbps: 0,
-                    vbr_quality: Some(MP3_TARGET_KBPS),
+                    bitrate_kbps: MP3_LIVE_BITRATE_KBPS,
+                    vbr_quality: None,
                 });
                 let silence_samples =
                     (sample_rate as usize * channels as usize * SILENCE_PERIOD_MS as usize) / 1000;
@@ -180,23 +181,32 @@ mod tests {
     #[test]
     fn live_encoder_emits_mpeg_frames_without_finish() {
         let mut encoder = Mp3Encoder::new(Mp3EncoderConfig {
-            bitrate_kbps: 0,
-            vbr_quality: Some(MP3_TARGET_KBPS),
+            bitrate_kbps: MP3_LIVE_BITRATE_KBPS,
+            vbr_quality: None,
         });
-        let samples = vec![0.0f32; 48000 * 2 / 4];
-        encoder.push_pcm_f32(&samples, 2, 48000).unwrap();
 
-        let mut bytes = Vec::new();
-        loop {
-            match encoder.next_packet() {
-                Ok(packet) => bytes.extend(packet),
-                Err(Mp3Error::Again) => break,
-                Err(error) => panic!("unexpected encoder error: {error}"),
+        // Feed the encoder like CPAL does in practice: many small stereo chunks,
+        // not one large file-style PCM buffer.
+        let frames_per_chunk = 256usize;
+        let mut emitted = Vec::new();
+        for block in 0..64usize {
+            let mut samples = Vec::with_capacity(frames_per_chunk * 2);
+            for i in 0..frames_per_chunk {
+                let t = (block * frames_per_chunk + i) as f32 / 48_000.0;
+                let sample = 0.25 * (2.0 * std::f32::consts::PI * 440.0 * t).sin();
+                samples.extend_from_slice(&[sample, sample]);
+            }
+            encoder.push_pcm_f32(&samples, 2, 48_000).unwrap();
+            while let Ok(packet) = encoder.next_packet() {
+                emitted.extend(packet);
+            }
+            if !emitted.is_empty() {
+                break;
             }
         }
 
-        assert!(bytes.len() >= 4);
-        assert_eq!(bytes[0], 0xff);
-        assert_eq!(bytes[1] & 0xe0, 0xe0);
+        assert!(emitted.len() >= 4, "live encoder emitted no MP3 frame");
+        assert_eq!(emitted[0], 0xff);
+        assert_eq!(emitted[1] & 0xe0, 0xe0);
     }
 }

@@ -169,6 +169,12 @@ fn streaming_request(
     let (status_code, header_offset) = if streaming_ctx.slim {
         // SlimProto clients drain the WAV/RF64 header if present
         (200u16, streaming_ctx.wav_header_size())
+    } else if streaming_ctx.streaming_format == StreamingFormat::Mp3 {
+        // MP3 is an endless, non-seekable internet-radio style stream.
+        // Browser audio elements commonly probe with Range: bytes=0-. Returning
+        // an artificial 206/Content-Range for an infinite stream can leave them
+        // waiting for seekable media semantics. Ignore Range and stream 200 OK.
+        (200u16, 0usize)
     } else {
         // UPNP clients check for range headers
         match &range {
@@ -296,17 +302,21 @@ fn streaming_request(
 /// HEAD METHOD request
 fn head_request(streaming_ctx: &StreamingContext, rq: Request, range: Option<RangeSpec>) {
     debug!("HEAD rq from {}", streaming_ctx.remote_addr);
-    let (status_code, header_offset) = match &range {
-        None => (200u16, 0usize),
-        Some(RangeSpec::Bounded) => {
-            return range_not_satisfiable(streaming_ctx, rq);
-        }
-        Some(RangeSpec::From(start)) => {
-            let hdr_size = streaming_ctx.wav_header_size() as u64;
-            if *start <= hdr_size {
-                (206u16, *start as usize)
-            } else {
-                (200u16, 0usize)
+    let (status_code, header_offset) = if streaming_ctx.streaming_format == StreamingFormat::Mp3 {
+        (200u16, 0usize)
+    } else {
+        match &range {
+            None => (200u16, 0usize),
+            Some(RangeSpec::Bounded) => {
+                return range_not_satisfiable(streaming_ctx, rq);
+            }
+            Some(RangeSpec::From(start)) => {
+                let hdr_size = streaming_ctx.wav_header_size() as u64;
+                if *start <= hdr_size {
+                    (206u16, *start as usize)
+                } else {
+                    (200u16, 0usize)
+                }
             }
         }
     };
