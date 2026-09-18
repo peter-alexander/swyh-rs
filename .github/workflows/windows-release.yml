@@ -1,0 +1,50 @@
+name: Windows Release Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build GUI release
+        run: cargo build --release --bin swyh-rs
+
+      - name: Build CLI release
+        run: cargo build --release --bin swyh-rs-cli --features cli --no-default-features
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item target/release/swyh-rs.exe dist/
+          Copy-Item target/release/swyh-rs-cli.exe dist/
+          Set-Content -Path dist/BUILD.txt -Value @(
+            "Repository: $env:GITHUB_REPOSITORY"
+            "Commit: $env:GITHUB_SHA"
+            "Built: $(Get-Date -Format o)"
+            "MP3 endpoint: http://127.0.0.1:5901/stream/swyh.mp3"
+          )
+          Compress-Archive -Path dist/* -DestinationPath swyh-rs-windows-mp3.zip -Force
+
+      - name: Upload Windows binaries
+        uses: actions/upload-artifact@v6
+        with:
+          name: swyh-rs-windows-mp3
+          path: swyh-rs-windows-mp3.zip
+          if-no-files-found: error
+          retention-days: 14
