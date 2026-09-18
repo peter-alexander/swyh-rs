@@ -24,7 +24,7 @@ use crate::{
     utils::ui_logger::{LogCategory, ui_log},
 };
 
-const MP3_BITRATE_KBPS: u32 = 192;
+const MP3_TARGET_KBPS: f32 = 192.0;
 const SILENCE_PERIOD_MS: u64 = 250;
 
 #[derive(Clone)]
@@ -68,9 +68,13 @@ impl Mp3Channel {
             .name("mp3_encoder".into())
             .stack_size(THREAD_STACK)
             .spawn(move || {
+                // rusty_mp3's CBR path enables a bit-reservoir mode at common
+                // MPEG-1 bitrates and therefore banks frames until finish(). A live
+                // stream never finishes, so use its streaming-friendly VBR path with
+                // an average bitrate target instead.
                 let mut encoder = Mp3Encoder::new(Mp3EncoderConfig {
-                    bitrate_kbps: MP3_BITRATE_KBPS,
-                    vbr_quality: None,
+                    bitrate_kbps: 0,
+                    vbr_quality: Some(MP3_TARGET_KBPS),
                 });
                 let silence_samples =
                     (sample_rate as usize * channels as usize * SILENCE_PERIOD_MS as usize) / 1000;
@@ -147,8 +151,8 @@ mod tests {
     #[test]
     fn live_encoder_emits_mpeg_frames_without_finish() {
         let mut encoder = Mp3Encoder::new(Mp3EncoderConfig {
-            bitrate_kbps: MP3_BITRATE_KBPS,
-            vbr_quality: None,
+            bitrate_kbps: 0,
+            vbr_quality: Some(MP3_TARGET_KBPS),
         });
         let samples = vec![0.0f32; 48000 * 2 / 4];
         encoder.push_pcm_f32(&samples, 2, 48000).unwrap();
