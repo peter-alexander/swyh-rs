@@ -1,9 +1,10 @@
 name: Publish MP3 Preview Release
 
 on:
-  workflow_run:
-    workflows: ["Windows Release Build"]
-    types: [completed]
+  push:
+    branches: [ main ]
+    paths:
+      - .github/workflows/publish-mp3-preview.yml
 
 permissions:
   actions: read
@@ -11,7 +12,6 @@ permissions:
 
 jobs:
   publish:
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_sha == 'b9fbf5607782310d80646f89d2df98df8624cdc2' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -21,7 +21,7 @@ jobs:
           name: swyh-rs-windows-mp3
           path: artifact
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: 35354503228
 
       - name: Verify packaged files
         run: unzip -l artifact/swyh-rs-windows-mp3.zip
@@ -30,7 +30,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.21.1-mp3.1
-          target_commitish: b9fbf5607782310d80646f89d2df98df8624cdc2
+          target_commitish: d86ad426714ca6add8a878b46bdbaa2593e86564
           name: swyh-rs 1.21.1 MP3 preview 1
           prerelease: true
           body: |
@@ -42,7 +42,8 @@ jobs:
             MP3 is encoded as live VBR targeting about 192 kbps. The ZIP contains:
             - `swyh-rs.exe` — GUI
             - `swyh-rs-cli.exe` — CLI
-            - `BUILD.txt` — source commit/build metadata
+            - `BUILD.txt` — build metadata
 
-            Built from commit `b9fbf5607782310d80646f89d2df98df8624cdc2`.
+            The binaries were built after the MP3 feature commit `d86ad426714ca6add8a878b46bdbaa2593e86564`;
+            subsequent source changes before the build affected CI workflow files only.
           files: artifact/swyh-rs-windows-mp3.zip
