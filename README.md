@@ -106,7 +106,7 @@ You can also use swyh-rs as an internet radio station on your local network. swy
 - `http://{your-pc-ip}/stream/swyh.wav` when streaming WAV format
 - `http://{your-pc-ip}/stream/swyh.rf64` when streaming RF64 format
 - `http://{your-pc-ip}/stream/swyh.flac` when streaming FLAC format
-- `http://{your-pc-ip}/stream/swyh.mp3` when streaming MP3 format
+- `http://{your-pc-ip}/stream/swyh.mp3` when streaming MP3 format (live VBR, targeting about 192 kbps)
 
 You can append query parameters to the url for bits per sample (bd = bit depth, 16 or 24) and streamsize (ss: nonechunked, u32maxchunked, u64maxchunked, u32maxnotchunked, u64maxnotchunked).
 The query parmeters in the query string override the configured values.
