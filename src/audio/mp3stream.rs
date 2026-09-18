@@ -39,7 +39,11 @@ pub(crate) struct Mp3Channel {
 
 impl Mp3Channel {
     #[must_use]
-    pub(crate) fn new(samples_chan: Receiver<AudioSamples>, sample_rate: u32, channels: u16) -> Self {
+    pub(crate) fn new(
+        samples_chan: Receiver<AudioSamples>,
+        sample_rate: u32,
+        channels: u16,
+    ) -> Self {
         let (mp3_out, mp3_in) = unbounded();
         Self {
             samples_rcvr: samples_chan,
@@ -84,12 +88,24 @@ impl Mp3Channel {
                 while active.load(Acquire) {
                     match samples_rcvr.recv_timeout(timeout) {
                         Ok(samples) => {
-                            if !encode_and_drain(&mut encoder, &samples, channels, sample_rate, &mp3_out) {
+                            if !encode_and_drain(
+                                &mut encoder,
+                                &samples,
+                                channels,
+                                sample_rate,
+                                &mp3_out,
+                            ) {
                                 break;
                             }
                         }
                         Err(RecvTimeoutError::Timeout) if active.load(Acquire) => {
-                            if !encode_and_drain(&mut encoder, &silence, channels, sample_rate, &mp3_out) {
+                            if !encode_and_drain(
+                                &mut encoder,
+                                &silence,
+                                channels,
+                                sample_rate,
+                                &mp3_out,
+                            ) {
                                 break;
                             }
                         }
@@ -103,7 +119,10 @@ impl Mp3Channel {
 
         if let Err(error) = spawn_result {
             self.active.store(false, Release);
-            ui_log(LogCategory::Error, &format!("Unable to start MP3 encoder thread: {error}"));
+            ui_log(
+                LogCategory::Error,
+                &format!("Unable to start MP3 encoder thread: {error}"),
+            );
         }
     }
 
@@ -120,7 +139,10 @@ fn encode_and_drain(
     output: &Sender<Vec<u8>>,
 ) -> bool {
     if let Err(error) = encoder.push_pcm_f32(samples, channels, sample_rate) {
-        ui_log(LogCategory::Error, &format!("MP3 encoder input error: {error}"));
+        ui_log(
+            LogCategory::Error,
+            &format!("MP3 encoder input error: {error}"),
+        );
         return false;
     }
     drain_encoder(encoder, output)
@@ -137,7 +159,10 @@ fn drain_encoder(encoder: &mut Mp3Encoder, output: &Sender<Vec<u8>>) -> bool {
             Err(Mp3Error::Again) => return true,
             Err(Mp3Error::Eof) => return false,
             Err(error) => {
-                ui_log(LogCategory::Error, &format!("MP3 encoder output error: {error}"));
+                ui_log(
+                    LogCategory::Error,
+                    &format!("MP3 encoder output error: {error}"),
+                );
                 return false;
             }
         }
