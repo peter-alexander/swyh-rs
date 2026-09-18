@@ -70,7 +70,7 @@ fn pcm_size_code(bits_per_sample: BitDepth) -> u8 {
 /// connection to `server_ip:streaminfo.server_port` and decode
 /// `streaminfo.streaming_format`.
 ///
-/// Flac is self-describing (`pcm_*` fields set to `'?'`, format `'f'`).
+/// Flac and MP3 are self-describing (`pcm_*` fields set to `'?'`, formats `'f'` and `'m'`).
 /// Lpcm/Wav/Rf64 all map to `'p'` — see this module's doc comment for the
 /// headerless-PCM rationale. Returns `Err` instead of silently sending an
 /// undefined/wrong `pcm_sample_rate` if `streaminfo.sample_rate` has no
@@ -90,6 +90,8 @@ pub fn build_strm_start(
     let (format, pcm_sample_size, pcm_sample_rate, pcm_channels, pcm_endianness) =
         if fmt == StreamingFormat::Flac {
             (b'f', b'?', b'?', b'?', b'?')
+        } else if fmt == StreamingFormat::Mp3 {
+            (b'm', b'?', b'?', b'?', b'?')
         } else {
             let rate = pcm_rate_code(streaminfo.sample_rate).ok_or_else(|| {
                 eco_format!(
@@ -215,6 +217,22 @@ mod tests {
         assert_eq!(
             request_line,
             "GET /stream/swyh.flac?slim=1 HTTP/1.0\r\n\r\n"
+        );
+    }
+
+    #[test]
+    fn strm_start_mp3_frame_layout() {
+        let ip = Ipv4Addr::new(192, 168, 1, 42);
+        let info = streaminfo(48000, BitDepth::Bits16, StreamingFormat::Mp3);
+        let frame = build_strm_start(ip, &info).expect("MP3 is self-describing");
+        let payload = &frame[6..];
+
+        assert_eq!(payload[2], b'm');
+        assert_eq!(&payload[3..7], b"????");
+        let request_line = std::str::from_utf8(&payload[24..]).unwrap();
+        assert_eq!(
+            request_line,
+            "GET /stream/swyh.mp3?slim=1 HTTP/1.0\r\n\r\n"
         );
     }
 
