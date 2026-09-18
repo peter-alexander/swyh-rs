@@ -59,7 +59,7 @@
             default = 16;
           };
           streaming_format = lib.mkOption {
-            description = "Streaming format: lpcm, wav, RF64 of flac";
+            description = "Streaming format: lpcm, wav, RF64, flac or mp3";
             type =
               str
               // {
@@ -69,6 +69,7 @@
                     "Wav"
                     "Rf64"
                     "Flac"
+                    "Mp3"
                   ];
               };
             default = "Lpcm";
