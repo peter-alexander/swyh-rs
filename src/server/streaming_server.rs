@@ -302,25 +302,24 @@ fn streaming_request(
 /// HEAD METHOD request
 fn head_request(streaming_ctx: &StreamingContext, rq: Request, range: Option<RangeSpec>) {
     debug!("HEAD rq from {}", streaming_ctx.remote_addr);
-    let (status_code, header_offset) =
-        if streaming_ctx.streaming_format == StreamingFormat::Mp3 {
-            (200u16, 0usize)
-        } else {
-            match &range {
-                None => (200u16, 0usize),
-                Some(RangeSpec::Bounded) => {
-                    return range_not_satisfiable(streaming_ctx, rq);
-                }
-                Some(RangeSpec::From(start)) => {
-                    let hdr_size = streaming_ctx.wav_header_size() as u64;
-                    if *start <= hdr_size {
-                        (206u16, *start as usize)
-                    } else {
-                        (200u16, 0usize)
-                    }
+    let (status_code, header_offset) = if streaming_ctx.streaming_format == StreamingFormat::Mp3 {
+        (200u16, 0usize)
+    } else {
+        match &range {
+            None => (200u16, 0usize),
+            Some(RangeSpec::Bounded) => {
+                return range_not_satisfiable(streaming_ctx, rq);
+            }
+            Some(RangeSpec::From(start)) => {
+                let hdr_size = streaming_ctx.wav_header_size() as u64;
+                if *start <= hdr_size {
+                    (206u16, *start as usize)
+                } else {
+                    (200u16, 0usize)
                 }
             }
-        };
+        }
+    };
     let header_offset = if streaming_ctx.slim {
         streaming_ctx.wav_header_size()
     } else {
