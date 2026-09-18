@@ -1,7 +1,7 @@
 //! `tiny-http`-based streaming server.
 //!
 //! [`run_server`] listens for incoming GET/HEAD requests and serves captured audio
-//! as LPCM, WAV, RF64, or FLAC over HTTP with DLNA-compatible headers.
+//! as LPCM, WAV, RF64, FLAC, or MP3 over HTTP with DLNA-compatible headers.
 //! Each accepted connection gets its own [`ChannelStream`] fed by the audio capture pipeline.
 
 use crate::{
@@ -99,6 +99,12 @@ pub fn run_server(
                     // build a fully-initialised context from all available inputs
                     let streaming_ctx = StreamingContext::new(wd, &rq, &sp);
                     debug!("{streaming_ctx:?}");
+                    if !streaming_ctx
+                        .streaming_format
+                        .supports_sample_rate(streaming_ctx.sample_rate)
+                    {
+                        return unsupported_sample_rate(&streaming_ctx, rq);
+                    }
                     // handle response, streaming if GET, headers only otherwise
                     let range = parse_range_header(rq.headers());
                     match *rq.method() {
@@ -263,7 +269,7 @@ fn streaming_request(
     }
     let (removed, nclients) = remove_client(&streaming_ctx.remote_addr);
     if let Some(chs) = removed {
-        chs.stop_flac_encoder();
+        chs.stop_encoders();
     }
     debug!("Now have {nclients} streaming clients left");
     // inform the main thread that this renderer has finished receiving
@@ -380,6 +386,7 @@ fn get_dlna_headers(streaming_ctx: &StreamingContext) -> Vec<Header> {
     // get the dlna format string
     let ct_text = match streaming_ctx.streaming_format {
         StreamingFormat::Flac => "audio/flac".to_string(),
+        StreamingFormat::Mp3 => "audio/mpeg".to_string(),
         StreamingFormat::Wav | StreamingFormat::Rf64 => "audio/vnd.wave;codec=1".to_string(),
         StreamingFormat::Lpcm => match streaming_ctx.bits_per_sample {
             BitDepth::Bits16 => {
@@ -404,6 +411,24 @@ fn get_dlna_headers(streaming_ctx: &StreamingContext) -> Vec<Header> {
         headers.push(Header::from_bytes(&b"TransferMode.dlna.org"[..], &b"Streaming"[..]).unwrap());
     }
     headers
+}
+
+fn unsupported_sample_rate(streaming_ctx: &StreamingContext, rq: Request) {
+    ui_log(
+        LogCategory::Warning,
+        &format!(
+            "{} does not support a {} Hz source without resampling",
+            streaming_ctx.streaming_format, streaming_ctx.sample_rate
+        ),
+    );
+    let headers = get_std_headers();
+    let response = Response::new(StatusCode(415), headers, io::empty(), Some(0), None);
+    if let Err(error) = rq.respond(response) {
+        ui_log(
+            LogCategory::Error,
+            &format!("Unable to send unsupported-media response: {error}"),
+        );
+    }
 }
 
 /// get the standard headers
