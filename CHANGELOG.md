@@ -1,6 +1,8 @@
 # swyh-rs Changelog
 
 - 1.21.1 (unreleased)
+  - add live MP3 streaming (`audio/mpeg`, `/stream/swyh.mp3`) using the pure-Rust `rusty_mp3` encoder; GUI, CLI, UPnP/OpenHome and SlimProto included
+  - MP3 uses streaming VBR targeting about 192 kbps and accepts MPEG Layer III sample rates up to 48 kHz
   - prefer String over EcoString when EcoString has no clear advantage
   - refactor: some renaming and/or moving of files
   - slimproto: optimize hartbeat
