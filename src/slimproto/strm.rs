@@ -230,10 +230,7 @@ mod tests {
         assert_eq!(payload[2], b'm');
         assert_eq!(&payload[3..7], b"????");
         let request_line = std::str::from_utf8(&payload[24..]).unwrap();
-        assert_eq!(
-            request_line,
-            "GET /stream/swyh.mp3?slim=1 HTTP/1.0\r\n\r\n"
-        );
+        assert_eq!(request_line, "GET /stream/swyh.mp3?slim=1 HTTP/1.0\r\n\r\n");
     }
 
     #[test]
