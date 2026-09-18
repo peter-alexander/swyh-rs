@@ -1,0 +1,48 @@
+name: Publish MP3 Preview Release
+
+on:
+  workflow_run:
+    workflows: ["Windows Release Build"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_sha == 'b9fbf5607782310d80646f89d2df98df8624cdc2' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: swyh-rs-windows-mp3
+          path: artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Verify packaged files
+        run: unzip -l artifact/swyh-rs-windows-mp3.zip
+
+      - name: Publish GitHub prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.21.1-mp3.1
+          target_commitish: b9fbf5607782310d80646f89d2df98df8624cdc2
+          name: swyh-rs 1.21.1 MP3 preview 1
+          prerelease: true
+          body: |
+            Windows x86-64 preview build of the swyh-rs fork with live MP3 streaming.
+
+            MP3 endpoint:
+            `http://127.0.0.1:5901/stream/swyh.mp3`
+
+            MP3 is encoded as live VBR targeting about 192 kbps. The ZIP contains:
+            - `swyh-rs.exe` — GUI
+            - `swyh-rs-cli.exe` — CLI
+            - `BUILD.txt` — source commit/build metadata
+
+            Built from commit `b9fbf5607782310d80646f89d2df98df8624cdc2`.
+          files: artifact/swyh-rs-windows-mp3.zip
