@@ -50,7 +50,7 @@ I wrote this because
 - SWYH did not work well with Volumio (push streaming did not work)
 - SWYH has a substantial memory leak due to the use of an old and unmaintained Intel .Net UPNP/DLNA library it uses.
 
-This fork adds live **MP3** re-encoding at 192 kbps CBR. MP3 input sample rates are limited to the MPEG Layer III rates up to 48 kHz; 44.1 and 48 kHz require no resampling.
+This fork adds live **MP3** re-encoding with a target average bitrate of about 192 kbps (VBR). MP3 input sample rates are limited to the MPEG Layer III rates up to 48 kHz; 44.1 and 48 kHz require no resampling.
 
 It has been tested with
 
@@ -82,7 +82,7 @@ Music is streamed with the sample rate of the music source (the chosen audio out
 
 Supported audio streaming formats:
 
-- **MP3** (MPEG Layer III), 192 kbps CBR, for renderers and internet-radio clients that need a lossy stream
+- **MP3** (MPEG Layer III), VBR targeting about 192 kbps, for renderers and internet-radio clients that need a lossy stream
 - 16 bit or 24 bit **FLAC** (lossless compression, I'm using the lowest compression level for performance and latency reasons). It is available since version 1.4.0
 - audio/wav (16 bit) with a "maximum length" (4 GB) **WAV** header, available since version 1.3.5
 - uncompressed 16 bit **LPCM** format (audio/l16)
